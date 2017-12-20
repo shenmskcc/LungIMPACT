@@ -75,9 +75,10 @@ predictIncomingPatient <- function(mutGenes,clinical,ClinRefit,time.type,MD,Lass
   mut <- as.vector(mut)
   RiskScore.new <- mean(LassoFits%*%t(mut)) 
   RiskScoreRange <- range(RiskScore)
-  #RiskScore <- c(RiskScore,RiskScore.new)
-  #RiskScore <- rescale(RiskScore, to = c(0, 10), from = range(RiskScore, na.rm = TRUE, finite = TRUE))
-  RiskScore <- rescale(RiskScore.new, to = c(0, 10), from = RiskScoreRange)
+  to <- c(0,10)
+  from <- range(average.risk, na.rm = TRUE, finite = TRUE)
+  RiskScore <- (as.numeric(average.risk)-from[1])/diff(from)*diff(to)+to[1]
+  #RiskScore <- rescale(RiskScore.new, to = c(0, 10), from = RiskScoreRange)
   RiskScore <- RiskScore[length(RiskScore)]
   ### part 3 : Refit with the given refitted clinical variable
   clin <- as.data.frame(cbind(clin,RiskScore))
