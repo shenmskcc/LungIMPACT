@@ -21,14 +21,6 @@
 # 2) Summary Table
 
 ### TEST
-# load("FirstRun.Rdata")
-# mutGenes <- "KRAS"
-# clinical <- c("Sex","Smoker","Age")
-# ClinRefit <- FirstRun$ClinRefit
-# time.type <- "Months"
-# MD <- 12
-# LassoFits <- FirstRun$LassoFits
-# RiskScore <- FirstRun$average.risk
 
 predictIncomingPatient <- function(mutGenes,clinical,ClinRefit,time.type,MD,LassoFits,RiskScore){
   
@@ -64,21 +56,12 @@ predictIncomingPatient <- function(mutGenes,clinical,ClinRefit,time.type,MD,Lass
   # match input from the app
   clin[,match(clinical,colnames(clin))] <- 1
   
-  # if(sum(clin)==0 && sum(mut) == 0){
-  #   load("FirstPred.Rdata")
-  #   return(list("IndSurvKM"=FirstPred$IndSurvKM,"IndPredTable"=FirstPred$IndPredTable,"RiskScore"=FirstPred$RiskScore))
-  # }
-  
-  #else{
   ### Part 2 : Get the predicted risk score
   LassoFits <- as.matrix(LassoFits)
   mut <- as.vector(mut)
   RiskScore.new <- mean(LassoFits%*%t(mut)) 
   RiskScoreRange <- range(RiskScore)
-  to <- c(0,10)
-  from <- range(average.risk, na.rm = TRUE, finite = TRUE)
-  RiskScore <- (as.numeric(average.risk)-from[1])/diff(from)*diff(to)+to[1]
-  #RiskScore <- rescale(RiskScore.new, to = c(0, 10), from = RiskScoreRange)
+  RiskScore <- rescale(RiskScore.new, to = c(0, 10), from = RiskScoreRange)
   RiskScore <- RiskScore[length(RiskScore)]
   ### part 3 : Refit with the given refitted clinical variable
   clin <- as.data.frame(cbind(clin,RiskScore))
@@ -142,8 +125,5 @@ predictIncomingPatient <- function(mutGenes,clinical,ClinRefit,time.type,MD,Lass
   #}
 }
 
-# FirstPred <- list("IndSurvKM"=IndSurvKM,"IndPredTable"=survivalSummary,"RiskScore"=RiskScore)
-# save(FirstPred,file="FirstPred.Rdata")
-#predictIncomingPatient(mutGenes,LassoFits,clinical,ClinRefit,time.type,MD)
 
 

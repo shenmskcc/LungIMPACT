@@ -1,7 +1,6 @@
 KMStuff <-function(data,average.risk,topHits,numGroups,cuts,geneList) {
   
-  if(colnames(data)[1]  == "time") {LT = FALSE}
-  if(colnames(data)[1] == "time1") {LT = TRUE}
+  LT = T
   cuts <- as.numeric(cuts)
   numGroups <- as.numeric(numGroups)
   OUT <- MakeKM(data,average.risk,topHits,LT,numGroups,cuts,geneList)

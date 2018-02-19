@@ -1,20 +1,9 @@
-# Make first pass
-# load("FirstRun.Rdata")
-# data <- FirstRun$data.out
-# average.risk <- FirstRun$average.risk
-# topHits <- FirstRun$topHits
-# LT <- TRUE
-# numGroups <- 4
-# cuts <- c(0.25,0.75,0.9)
-
 MakeKM <- function(data,average.risk,topHits,LT,numGroups,cuts,geneList){
   
   data$lvl4Groups <- rep(NA,nrow(data))
   qts <- as.numeric(quantile(average.risk,cuts))
   
   if(numGroups ==2){
-    #qts <- as.numeric(summary(average.risk)[c(2,3,5)])
-    #qts <- as.numeric(quantile(average.risk,cuts))
     for(i in 1:nrow(data)){
       
       # for 2 level groups
@@ -66,128 +55,11 @@ MakeKM <- function(data,average.risk,topHits,LT,numGroups,cuts,geneList){
   }
   
   
-  ##################
-  
-  ### Is this left truncated ?
-  # Will be LT if second column is binary 
-  if(LT == TRUE) {
-    colnames(data)[1:3] <- c("time1","time2","status")
-    survObj <<- with(data, Surv(time=time1, time2=time2, event=status))
-    if(max(data$time2) > 1000){
-      timeType = "Days"
-      intercept = 5*365}
-    else{
-      timeType = "Months"
-      intercept = 5*12}
-  }
-  if(LT == FALSE) {
-    colnames(data)[1:2] <- c("time","status")
-    survObj <<- with(data, Surv(time=time, event=status))
-    if(max(data$time) > 1000){
-      timeType = "Days"
-      intercept = 5*365}
-    else{
-      timeType = "Months"
-      intercept = 5*12}
-  }
-  ## for 4 levels
-  # make KM for Lasso 1 :
-  if(numGroups == 2){data$lvl4Groups <- factor(data$lvl4Groups, levels =c("Low","High") )}
-  if(numGroups == 3){data$lvl4Groups <- factor(data$lvl4Groups, levels =c("Low","Intermediate","High") )}
-  if(numGroups == 4){data$lvl4Groups <- factor(data$lvl4Groups, levels =c("Low","Low-intermediate","High-intermediate","High") )}
-  data$lvl4Groups <- as.factor(data$lvl4Groups)
-  RiskGroup <<- as.factor(data$lvl4Groups)
-  #km.lvl4 <<- survfit(survObj ~ RiskGroup,data=data, conf.type = "log-log")
-  ### Get pvalue 
-  fit0 <- coxph(survObj ~ RiskGroup,data=data, 
-                na.action=na.exclude) 
-  log.test.pval <- as.vector(summary(fit0)[10][[1]])[3]
-  CI <- as.numeric(as.vector(summary(fit0)[14])[[1]][1])
-  limit <- as.numeric(quantile(data$time2,0.95))
-  KM_2LVLS <- ggsurvplot(survfit(survObj ~ RiskGroup,data=data, conf.type = "log-log"),conf.int  = TRUE,surv.median.line = "hv",
-                         data = data,xlim=c(0,limit),break.time.by = 6) + xlab("Time (Months)") +
-    labs(title = paste("Kaplan Meier Plot (p-value : " ,round(log.test.pval,digits =4)," and CI : ",round(CI,digits=4), ")",sep=""))+ 
-    geom_vline(xintercept=intercept,col="red", lty = 2)
-  
-  # png(paste(file,"_KM_2LVLS.png",sep=""),height = 10,width = 14,unit="in",res = 300)
-  # print(KM_2LVLS)
-  # dev.off()
-  
-  
-  ### MAKE TABLE 
-  if(numGroups == 2) {Groups <- c("Low","High")}
-  if(numGroups == 3) {Groups <- c("Low","Intermediate","High")}
-  if(numGroups == 4) {Groups <- c("Low","Low-intermediate","High-intermediate","High")}
-  # survivalGroup <- as.data.frame(matrix(nrow=length(Groups),ncol=4))
-  # rownames(survivalGroup) <- Groups
-  # colnames(survivalGroup) <- c("MedianOS","95%CI","1Ysurvival","3Ysurvival")
-  # # for each group find closest value to median 
-  # if(timeType == "Months"){YR1 <- 1*12;YR3 <- 3*12}
-  # if(timeType == "Days"){YR1 <- 1*365;YR3 <- 3*365}
-  # for(i in 1:length(Groups)){
-  #   if(LT == TRUE){NewObject <- with(data[data$lvl4Groups == Groups[i],],Surv(time1,time2,status))}
-  #   if(LT == FALSE){NewObject <- with(data[data$lvl4Groups == Groups[i],],Surv(time,status))}
-  #   Fit <- survfit(NewObject ~ 1,data=data[data$lvl4Groups == Groups[i],], conf.type = "log-log")
-  #   med.index <- which.min(abs(Fit$surv-0.5))
-  #   YR3.index <- which.min(abs(Fit$time-YR1))
-  #   YR5.index <- which.min(abs(Fit$time-YR3))
-  #   survivalGroup[i,] <- c(round(Fit$time[med.index],digits=2),paste0("(",round(Fit$time[which.min(abs(Fit$lower-0.5))],digits=2),",",
-  #                                                                     round(Fit$time[which.min(abs(Fit$upper-0.5))],digits=2),")"),
-  #                          round(Fit$surv[YR3.index],digits=2),round(Fit$surv[YR5.index],digits=2))
-  # }
-  
-  
-  ### MAKE CORRESPONDING MUTATION PER GROUP PLOT ###
-  
-  # mutDistrib <- as.data.frame(matrix(nrow = numGroups,ncol = length(topHits)))
-  # rownames(mutDistrib) <- Groups
-  # colnames(mutDistrib) <- topHits
-  # for( gene in 1:length(topHits)){
-  #   if(length(data[data$lvl4Groups == "Low",match(topHits[gene],colnames(data))]) != 0 ){
-  #     mutDistrib[match("Low",rownames(mutDistrib)),gene] <- sum(data[data$lvl4Groups == "Low",match(topHits[gene],colnames(data))])/length(data[data$lvl4Groups == "Low",match(topHits[gene],colnames(data))])
-  #   }
-  #   if(length(data[data$lvl4Groups == "Low-intermediate",match(topHits[gene],colnames(data))]) != 0 ){
-  #     mutDistrib[match("Low-intermediate",rownames(mutDistrib)),gene] <- sum(data[data$lvl4Groups == "Low-intermediate",match(topHits[gene],colnames(data))])/length(data[data$lvl4Groups == "Low-intermediate",match(topHits[gene],colnames(data))])
-  #   }
-  #   if(length(data[data$lvl4Groups == "Intermediate",match(topHits[gene],colnames(data))]) != 0 ){
-  #     mutDistrib[match("Intermediate",rownames(mutDistrib)),gene] <- sum(data[data$lvl4Groups == "Intermediate",match(topHits[gene],colnames(data))])/length(data[data$lvl4Groups == "Intermediate",match(topHits[gene],colnames(data))])
-  #   }
-  #   if(length(data[data$lvl4Groups == "High-intermediate",match(topHits[gene],colnames(data))]) != 0  ){
-  #     mutDistrib[match("High-intermediate",rownames(mutDistrib)),gene] <- sum(data[data$lvl4Groups == "High-intermediate",match(topHits[gene],colnames(data))])/length(data[data$lvl4Groups == "High-intermediate",match(topHits[gene],colnames(data))])
-  #   }
-  #   if(length(data[data$lvl4Groups == "High",match(topHits[gene],colnames(data))]) != 0 ){
-  #     mutDistrib[match("High",rownames(mutDistrib)),gene] <- sum(data[data$lvl4Groups == "High",match(topHits[gene],colnames(data))])/length(data[data$lvl4Groups == "High",match(topHits[gene],colnames(data))])
-  #   }
-  # }
-  # mutDistrib$Risk <- Groups
-  # melted.prop <- melt(mutDistrib)
-  # colnames(melted.prop) <- c("Risk","Gene","Proportion")
-  # #melted.prop$Risk <- as.factor(melted.prop$Risk)#c("Low","High")
-  # melted.prop$Risk <- factor(melted.prop$Risk, levels =Groups )
-  # mut_2LVLS <- ggplot(melted.prop, aes(x = Gene, y = Proportion, fill = Risk)) +
-  #   geom_bar(stat = "identity", position=position_dodge()) +
-  #   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  #   labs(title = "Proportion of mutations for each genes per risk and method", subtitle = "Using genetic data only")
-  # 
-  ### PIE CHARTS ###
   count.dups <- function(DF){
 
     DT <- data.table(DF)
     DT[,.N, by = names(DT)]
   }
-
-  ### FIT topHits ###
-  fit.data <- data[,match(c("time1","time2","status",topHits[1:5]),colnames(data))]
-  fit.topHits <- coxph(Surv(time1,time2,status)~.,data= fit.data)
-
-  if( LT && max(data$time2) > 1000){MD = 365
-  time.type = "Days"}
-  if( LT && max(data$time2) < 1000){MD = 12
-  time.type = "Months"}
-  if( !LT && max(data$time) > 1000){MD = 365
-  time.type = "Days"}
-  if( !LT && max(data$time) < 1000){MD = 12
-  time.type = "Months"}
 
   ####
   if(length(geneList) == 0) {useGenes <- topHits[1:5]}
@@ -420,11 +292,10 @@ MakeKM <- function(data,average.risk,topHits,LT,numGroups,cuts,geneList){
              yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
   }
   
-  return(list(#"KM_Plot" = KM_2LVLS , "mut_Plot" = mut_2LVLS,"SurvSum" = survivalGroup,#,"Profile" = major.profile
-             "PieChart"=pie.chart,"GenesUsed"=paste0(useGenes,collapse = ","))) #"MajorCasesKM" = MajorCasesKM,,"coMutation" = coMutPlot))
+  return(list("PieChart"=pie.chart,"GenesUsed"=paste0(useGenes,collapse = ",")))
 }
 
- #RiskGroupsResults <- MakeKM(data,average.risk,topHits,LT,numGroups,cuts,geneList = NULL)
+# RiskGroupsResults <- MakeKM(data,average.risk,topHits,LT,numGroups,cuts,geneList = NULL)
 # 
 # # Make2KM(data = data.gen,average.risk = averaged.risk.gen.boot.bag,
 # #         file = "GenOnly_Bagging",type.data = "GenOnly")

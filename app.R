@@ -139,11 +139,11 @@ ui <- dashboardPage(
 server <- function(input, output) {
   
   # load functions of interest
-  # source("./Scripts/GetResultsVarSelect.R")
+  source("./Scripts/GetResultsVarSelect.R")
   source("./Scripts/MakeKM.R")
-  # source("./Scripts/GetKMStuff.R")
+  source("./Scripts/GetKMStuff.R")
   # source("./Scripts/PlotTree.R")
-  # source("./Scripts/PredictIncoming.R")
+  source("./Scripts/PredictIncoming.R")
   
   # load("FirstRun.Rdata")
   # load("RiskGroupsResults.Rdata")
@@ -167,12 +167,11 @@ server <- function(input, output) {
   output$predRiskText <- renderText({ paste("<h3> <u> <font color=\"black\"><b>","Risk group stratification", "</b></font> </u> </h3>") })
   GetResultsReactive <- reactive({getResults(studyType = "Lung",
                                              method="LASSO",
-                                             #clinical = input$AddClin,
-                                             CNV = FALSE,
-                                             OnlyCNV = FALSE,
                                              geneList = unlist(strsplit(input$GeneListRisk, split ="," )))})
-  
+
   output$effectPlot <- renderPlotly({GetResultsReactive()$selectInflPlot})
+  #output$effectPlot <- renderPlotly({FirstRun$selectInflPlot})
+  
   
   KMStuffReactive <- reactive({
     KMStuff(FirstRun$data.out,FirstRun$average.risk,
@@ -182,37 +181,38 @@ server <- function(input, output) {
   })
   output$KMText <- renderText({ paste("<h4> <u> <font color=\"black\"><b>","Kaplan-Meier plot of overall survival", "</b></font> </u> </h4>") })
   
-  output$KM <- renderPlot(RiskGroupsResults$KM_Plot)
-  output$SurvSum <- renderTable(RiskGroupsResults$SurvSum,rownames = TRUE)
+  output$KM <- renderPlot(FirstRun$KM_Plot)
+  output$SurvSum <- renderTable(FirstRun$SurvSum,rownames = TRUE)
   
   output$MutGroupText <- renderText({ paste("<h3> <u> <font color=\"black\"><b>","Mutation profiles by risk groups", "</b></font> </u> </h3>") })
   output$MutBPText <- renderText({ paste("<h4> <u> <font color=\"black\"><b>","Barplot of mutation frequency", "</b></font> </u> </h4>") })
   
   output$Mut <- renderPlot({
-    print(RiskGroupsResults$mut_Plot)})
+    print(FirstRun$mut_Plot)})
   
   ## Tab 2
   output$profiletext <- renderText({ paste("<h4> <u> <font color=\"black\"><b>","Piechart of most representative mutation profiles : ",
-                                           KMStuffReactive()$GenesUsed, "</b></font> </u> </h4>") })
+  KMStuffReactive()$GenesUsed, "</b></font> </u> </h4>") })
   output$ProfilePie <- renderPlotly({
-    #if(input$ShowPies) 
+    #if(input$ShowPies)
     print(KMStuffReactive()$PieChart)
   })
   
   
   makePredictionsReactive <- reactive({
     predictIncomingPatient(mutGenes = unlist(strsplit(input$GeneList, split =",")),
-                           clinical=c(input$Demographics),#,input$MetSite),
+                           clinical=c(input$Demographics),
                            ClinRefit=FirstRun$ClinRefit,
                            time.type=FirstRun$time.type,
                            MD=FirstRun$MD,
                            LassoFits=FirstRun$LassoFits,
                            RiskScore=FirstRun$average.risk)
   })
-  
+
   output$IndSurvKM <- renderPlotly({makePredictionsReactive()$IndSurvKM})
-  output$IndPredTable <- renderTable({makePredictionsReactive()$IndPredTable},rownames = TRUE) 
-  
+  output$IndPredTable <- renderTable({makePredictionsReactive()$IndPredTable},rownames = TRUE)
+  #output$IndSurvKM <- renderPlotly({FirstRun$IndSurvKM})
+ # output$IndPredTable <- renderTable({FirstRun$IndPredTable},rownames = TRUE) 
 }
 
 shinyApp(ui, server)
