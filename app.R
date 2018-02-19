@@ -5,9 +5,7 @@ library(reshape2)
 library(survminer)
 library(survival)
 library(data.table)
-library(rpart.plot)
 library(dplyr)
-library(gplots)
 library(scales)
 
 load("LungDemoData.Rdata")
@@ -194,8 +192,7 @@ server <- function(input, output) {
   output$profiletext <- renderText({ paste("<h4> <u> <font color=\"black\"><b>","Piechart of most representative mutation profiles : ",
   KMStuffReactive()$GenesUsed, "</b></font> </u> </h4>") })
   output$ProfilePie <- renderPlotly({
-    #if(input$ShowPies)
-    print(KMStuffReactive()$PieChart)
+    KMStuffReactive()$PieChart
   })
   
   
