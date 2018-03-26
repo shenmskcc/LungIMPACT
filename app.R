@@ -14,12 +14,13 @@ ui <- dashboardPage(
   dashboardHeader(title = "Prognostic models in metastatic lung adenocarcinoma (BETA)",titleWidth = 400),
   
   dashboardSidebar(width = 200,
-    sidebarMenu(
-    menuItem("Dashboard", tabName = "fixed", icon = icon("bar-chart")),
-    menuItem("Risk Group Stratification", tabName = "strat", icon = icon("scissors")),
-    menuItem("Gene View", tabName = "gene", icon = icon("gears")),
-    menuItem("Patient View", tabName = "patient", icon = icon("user-circle-o"))
-  )
+                   sidebarMenu(
+                     menuItem("Dashboard", tabName = "fixed", icon = icon("bar-chart")),
+                     menuItem("Risk Group Stratification", tabName = "strat", icon = icon("scissors")),
+                     menuItem("Gene View", tabName = "gene", icon = icon("gears")),
+                     menuItem("Patient View", tabName = "patient", icon = icon("user-circle-o")),
+                     menuItem("Generate Risk Score", tabName = "risk", icon = icon("gears"))
+                   )
   ),
   
   dashboardBody(
@@ -68,15 +69,15 @@ ui <- dashboardPage(
               sidebarLayout(
                 sidebarPanel(width = 12,
                              h2("Risk Group Stratification")
-                             ),
+                ),
                 mainPanel(width = 12,
-                  htmlOutput("predRiskText"),
-                  htmlOutput("KMText"),
-                  plotOutput("KM"),
-                  tableOutput("SurvSum"),
-                  htmlOutput("MutGroupText"),
-                  htmlOutput("MutBPText"),
-                  plotOutput("Mut")
+                          htmlOutput("predRiskText"),
+                          htmlOutput("KMText"),
+                          plotOutput("KM"),
+                          tableOutput("SurvSum"),
+                          htmlOutput("MutGroupText"),
+                          htmlOutput("MutBPText"),
+                          plotOutput("Mut")
                 )
               )
       ),
@@ -124,6 +125,27 @@ ui <- dashboardPage(
                           tableOutput("IndPredTable")
                 )
               )
+      ),
+      tabItem(tabName = "risk",
+              h2("Generate risk score in a new cohort"),
+              #   sidebarPanel( width = 12,
+              #     checkboxInput("ShowVolvano", "Show Volcano Plot", TRUE),
+              #                 checkboxInput("ShowPies", "Show Pie Charts", TRUE),
+              #                 submitButton("Submit")
+              # ),
+              sidebarLayout(
+                sidebarPanel(width = 12,
+                             fileInput(inputId = "File1", label = "Choose your dataset (.csv file)",
+                                       accept = c(".csv")
+                             )#,
+                             #submitButton("Submit")
+                ),
+                mainPanel(
+                  width = 12,
+                  plotOutput("RiskHistogram.new"),
+                  downloadLink("downloadData", "Download")
+                )
+              )
       )
       
     )
@@ -166,7 +188,7 @@ server <- function(input, output) {
   GetResultsReactive <- reactive({getResults(studyType = "Lung",
                                              method="LASSO",
                                              geneList = unlist(strsplit(input$GeneListRisk, split ="," )))})
-
+  
   output$effectPlot <- renderPlotly({GetResultsReactive()$selectInflPlot})
   #output$effectPlot <- renderPlotly({FirstRun$selectInflPlot})
   
@@ -190,7 +212,7 @@ server <- function(input, output) {
   
   ## Tab 2
   output$profiletext <- renderText({ paste("<h4> <u> <font color=\"black\"><b>","Piechart of most representative mutation profiles : ",
-  KMStuffReactive()$GenesUsed, "</b></font> </u> </h4>") })
+                                           KMStuffReactive()$GenesUsed, "</b></font> </u> </h4>") })
   output$ProfilePie <- renderPlotly({
     KMStuffReactive()$PieChart
   })
@@ -205,11 +227,66 @@ server <- function(input, output) {
                            LassoFits=FirstRun$LassoFits,
                            RiskScore=FirstRun$average.risk)
   })
-
+  
   output$IndSurvKM <- renderPlotly({makePredictionsReactive()$IndSurvKM})
   output$IndPredTable <- renderTable({makePredictionsReactive()$IndPredTable},rownames = TRUE)
   #output$IndSurvKM <- renderPlotly({FirstRun$IndSurvKM})
- # output$IndPredTable <- renderTable({FirstRun$IndPredTable},rownames = TRUE) 
+  # output$IndPredTable <- renderTable({FirstRun$IndPredTable},rownames = TRUE) 
+  
+  
+  ### GENERATING THE RISK SCORE FOR NEW DATA ###
+  
+  dset <- reactive({
+    inFile <- input$File1
+    if(is.null(inFile)) return(NULL)
+    
+    file.rename(inFile$datapath, paste0(inFile$datapath, ".csv"))
+    in.data <- read.csv(paste0(inFile$datapath, ".csv"), header = T,row.names = 1)
+    
+    dat <- FirstRun$data.out
+    coefs.full <- FirstRun$LassoFits
+    coefs <- apply(coefs.full,2,function(x){mean(x,na.rn=T)})
+    ori.risk <- FirstRun$average.risk
+    #in.data <- as.data.frame(matrix(rbinom(1100,1,prob=0.5),ncol =11))
+    #colnames(in.data) <- c("KEAP1","STK11","TP53","EGFR","KRAS","SMARCA4","alk","ros1","BRCA1","AXIN1","noNameTest")
+    
+    if(!all(is.na(match(colnames(in.data),colnames(dat))))){
+      matched.genes <- c(na.omit(match(colnames(in.data),colnames(dat))))
+      new.dat <- in.data[,which(!is.na(match(colnames(in.data),colnames(dat))))]
+      
+      #sub.data <- dat[,matched.genes]
+      in.data$Risk <- as.matrix(new.dat) %*% coefs[match(colnames(new.dat),names(coefs))]
+      RiskScoreRange <- range(in.data$Risk)
+      in.data$rescaledRisk <- rescale(in.data$Risk, to = c(0, 10), from = RiskScoreRange)
+      
+      RiskHistogram.new <- ggplot(in.data, aes(x = rescaledRisk, y = ..density..)) +
+        geom_histogram(show.legend = FALSE, aes(fill=..x..),
+                       breaks=seq(min(in.data$rescaledRisk,na.rm = T), max(in.data$rescaledRisk,na.rm = T), by=20/nrow(in.data))) +
+        geom_density(show.legend = FALSE) +
+        theme_minimal() +
+        labs(x = "Average risk score", y = "Density") +
+        scale_fill_gradient(high = "red", low = "green")
+      
+      return(list("RiskHistogram.new"=RiskHistogram.new,"out.data"=in.data))
+      
+    }
+    else{
+      stop("No gene in your dataset overlapped with the IMPACT platform. Please rename genes or check your dataset.")
+    }
+    
+  })
+  
+  output$RiskHistogram.new <- renderPlot(dset()$RiskHistogram.new)
+  
+  #data <- renderTable(dset()$out.data)
+  output$downloadData <- downloadHandler(
+    filename = function() {
+      paste("NewRiskData-", Sys.Date(), ".csv", sep="")
+    },
+    content = function(file) {
+      write.csv(dset()$out.data, file)
+    }
+  )
+  
 }
-
 shinyApp(ui, server)
