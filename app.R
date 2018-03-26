@@ -137,7 +137,11 @@ ui <- dashboardPage(
                 sidebarPanel(width = 12,
                              fileInput(inputId = "File1", label = "Choose your dataset (.csv file)",
                                        accept = c(".csv")
+                                       
                              )#,
+                             # textInput("OutName", 
+                             #           "Name or the output risk file :",
+                             #           value = "")#,
                              #submitButton("Submit")
                 ),
                 mainPanel(
@@ -281,7 +285,8 @@ server <- function(input, output) {
   #data <- renderTable(dset()$out.data)
   output$downloadData <- downloadHandler(
     filename = function() {
-      paste("NewRiskData-", Sys.Date(), ".csv", sep="")
+      #paste("NewRiskData",input$OutName,".csv", sep="")
+      paste("NewRiskData.csv", sep="")
     },
     content = function(file) {
       write.csv(dset()$out.data, file)
