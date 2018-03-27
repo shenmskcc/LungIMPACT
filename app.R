@@ -147,7 +147,7 @@ ui <- dashboardPage(
                 mainPanel(
                   width = 12,
                   plotOutput("RiskHistogram.new"),
-                  downloadLink("downloadData", "Download")
+                  downloadButton("downloadData", "Download (data with Risk)")
                 )
               )
       )
@@ -249,7 +249,7 @@ server <- function(input, output) {
     
     dat <- FirstRun$data.out
     coefs.full <- FirstRun$LassoFits
-    coefs <- apply(coefs.full,2,function(x){mean(x,na.rn=T)})
+    #coefs <- apply(coefs.full,2,function(x){mean(x,na.rn=T)})
     ori.risk <- FirstRun$average.risk
     #in.data <- as.data.frame(matrix(rbinom(1100,1,prob=0.5),ncol =11))
     #colnames(in.data) <- c("KEAP1","STK11","TP53","EGFR","KRAS","SMARCA4","alk","ros1","BRCA1","AXIN1","noNameTest")
@@ -259,9 +259,13 @@ server <- function(input, output) {
       new.dat <- in.data[,which(!is.na(match(colnames(in.data),colnames(dat))))]
       
       #sub.data <- dat[,matched.genes]
-      in.data$Risk <- as.matrix(new.dat) %*% coefs[match(colnames(new.dat),names(coefs))]
-      RiskScoreRange <- range(in.data$Risk)
-      in.data$rescaledRisk <- rescale(in.data$Risk, to = c(0, 10), from = RiskScoreRange)
+      coefs <- coefs.full[,match(colnames(new.dat),names(coefs.full))]
+      Risk.all <- as.matrix(coefs) %*% as.matrix(t(new.dat))
+      Risk <- apply(Risk.all,2,mean)
+      in.data$Risk <- Risk
+      
+      ori.risk.range <- range(ori.risk)
+      in.data$rescaledRisk <- rescale(in.data$Risk, to = c(0, 10), from = ori.risk.range)
       
       RiskHistogram.new <- ggplot(in.data, aes(x = rescaledRisk, y = ..density..)) +
         geom_histogram(show.legend = FALSE, aes(fill=..x..),
@@ -285,7 +289,6 @@ server <- function(input, output) {
   #data <- renderTable(dset()$out.data)
   output$downloadData <- downloadHandler(
     filename = function() {
-      #paste("NewRiskData",input$OutName,".csv", sep="")
       paste("NewRiskData.csv", sep="")
     },
     content = function(file) {
