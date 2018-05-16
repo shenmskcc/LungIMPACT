@@ -9,6 +9,8 @@ library(dplyr)
 library(scales)
 
 load("LungDemoData.Rdata")
+load("Results.Rdata")
+load("Means.Rdata")
 
 ui <- dashboardPage(
   dashboardHeader(title = "Prognostic models in metastatic lung adenocarcinoma (BETA)",titleWidth = 400),
@@ -147,7 +149,7 @@ ui <- dashboardPage(
                 mainPanel(
                   width = 12,
                   plotOutput("RiskHistogram.new"),
-                  downloadButton("downloadData", "Download (data with Risk)")
+                  downloadLink("downloadData", "Download")
                 )
               )
       )
@@ -229,7 +231,8 @@ server <- function(input, output) {
                            time.type=FirstRun$time.type,
                            MD=FirstRun$MD,
                            LassoFits=FirstRun$LassoFits,
-                           RiskScore=FirstRun$average.risk)
+                           RiskScore=FirstRun$average.risk,
+                           means.train=means.train)
   })
   
   output$IndSurvKM <- renderPlotly({makePredictionsReactive()$IndSurvKM})
@@ -240,36 +243,69 @@ server <- function(input, output) {
   
   ### GENERATING THE RISK SCORE FOR NEW DATA ###
   
+  ### GENERATING THE RISK SCORE FOR NEW DATA ###
+  
   dset <- reactive({
     inFile <- input$File1
     if(is.null(inFile)) return(NULL)
     
+    LassoFits <- as.matrix(Results$LassoFits)
+    ori.risk <- Results$ori.risk
+    
     file.rename(inFile$datapath, paste0(inFile$datapath, ".csv"))
     in.data <- read.csv(paste0(inFile$datapath, ".csv"), header = T,row.names = 1)
     
-    dat <- FirstRun$data.out
-    coefs.full <- FirstRun$LassoFits
-    #coefs <- apply(coefs.full,2,function(x){mean(x,na.rn=T)})
-    ori.risk <- FirstRun$average.risk
-    #in.data <- as.data.frame(matrix(rbinom(1100,1,prob=0.5),ncol =11))
-    #colnames(in.data) <- c("KEAP1","STK11","TP53","EGFR","KRAS","SMARCA4","alk","ros1","BRCA1","AXIN1","noNameTest")
+    features <- colnames(LassoFits)
+    features[match(c("alk","ros1","ret"),features)] <- paste0(features[match(c("alk","ros1","ret"),features)],".fusion")
+    colnames(LassoFits)[match(c("alk","ros1","ret"),colnames(LassoFits))] <- paste0(colnames(LassoFits)[match(c("alk","ros1","ret"),colnames(LassoFits))],".fusion")
     
-    if(!all(is.na(match(colnames(in.data),colnames(dat))))){
-      matched.genes <- c(na.omit(match(colnames(in.data),colnames(dat))))
-      new.dat <- in.data[,which(!is.na(match(colnames(in.data),colnames(dat))))]
+    # in.data <- as.data.frame(matrix(rbinom(1100,1,prob=0.5),ncol =11))
+    # colnames(in.data) <- c("KEAP1","STK11","TP53","EGFR","KRAS","SMARCA4","alk","ros1","BRCA1","AXIN1","noNameTest")
+    
+    if(!all(is.na(match(colnames(in.data),features)))){
+      matched.genes <- c(na.omit(match(colnames(in.data),features)))
+      new.dat <- in.data[,which(!is.na(match(colnames(in.data),features)))]
       
-      #sub.data <- dat[,matched.genes]
-      coefs <- coefs.full[,match(colnames(new.dat),names(coefs.full))]
-      Risk.all <- as.matrix(coefs) %*% as.matrix(t(new.dat))
-      Risk <- apply(Risk.all,2,mean)
-      in.data$Risk <- Risk
+      ## ADD ALL MISSING GENES TO BE ALL zero ##
+      missing <- features[which(is.na(match(features,colnames(new.dat))))]
+      to.add <- as.data.frame(matrix(0L,nrow=nrow(new.dat),ncol=length(missing)))
+      colnames(to.add) <- missing
+      rownames(to.add) <- rownames(new.dat)
+      new.dat <- as.data.frame(cbind(new.dat,to.add))
       
+      new.dat <- new.dat[,match(features,colnames(new.dat))]
+      
+      #############################################
+      
+      all.pred <- lapply(1:nrow(LassoFits),function(x){
+        
+        ### Subset to the coefs of that cv ###
+        coefs <- LassoFits[x,LassoFits[x,] != 0]
+        new.temp <- select(new.dat,names(coefs))
+        
+        if(!all(is.na(match(c("alk","ros1","ret"),names(means.train[[x]]))))){
+          names(means.train[[x]])[na.omit(match(c("alk","ros1","ret"),names(means.train[[x]])))] <- 
+            paste0(names(means.train[[x]])[na.omit(match(c("alk","ros1","ret"),names(means.train[[x]])))],".fusion")
+        }
+        ## substract mean mutation rate of TRAINING SET !!!###
+        new.x <- new.temp - rep(means.train[[x]][match(names(coefs),names(means.train[[x]]))], each = nrow(new.temp))
+        cal.risk.test <- drop(as.matrix(new.x) %*% coefs)
+        return(cal.risk.test)
+      })
+      
+      all.pred <- do.call("cbind",all.pred)
+      Risk <- apply(all.pred,1,mean)
+      names(Risk) <- rownames(new.dat)
+      # Risk.all <- as.matrix(coefs) %*% as.matrix(t(new.dat))
+      # Risk <- apply(Risk.all,2,mean)
+      #in.data$Risk <- Risk
+      ##########################################
       ori.risk.range <- range(ori.risk)
-      in.data$rescaledRisk <- rescale(in.data$Risk, to = c(0, 10), from = ori.risk.range)
-      
-      RiskHistogram.new <- ggplot(in.data, aes(x = rescaledRisk, y = ..density..)) +
+      in.data$OncoCastRiskScore <- rescale(Risk, to = c(0, 10), from = ori.risk.range) #WithOriginal
+      #in.data$rescaledRisk <- rescale(in.data$Risk, to = c(0, 10), from = range(in.data$Risk, na.rm = TRUE, finite = TRUE))
+      RiskHistogram.new <- ggplot(in.data, aes(x = OncoCastRiskScore, y = ..density..)) +
         geom_histogram(show.legend = FALSE, aes(fill=..x..),
-                       breaks=seq(min(in.data$rescaledRisk,na.rm = T), max(in.data$rescaledRisk,na.rm = T), by=20/nrow(in.data))) +
+                       breaks=seq(min(in.data$OncoCastRiskScore,na.rm = T), max(in.data$OncoCastRiskScore,na.rm = T), by=20/nrow(in.data))) +
         geom_density(show.legend = FALSE) +
         theme_minimal() +
         labs(x = "Average risk score", y = "Density") +

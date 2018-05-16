@@ -21,8 +21,16 @@
 # 2) Summary Table
 
 ### TEST
+mutGenes <- c("alk","STK11","TP53")
+clinical <- c("Age")
+ClinRefit <- FirstRun$ClinRefit
+time.type <- "Months"
+MD <- 12
+LassoFits <- as.matrix(FirstRun$LassoFits)
+RiskScore <- FirstRun$average.risk
+means.train <- means.train
 
-predictIncomingPatient <- function(mutGenes,clinical,ClinRefit,time.type,MD,LassoFits,RiskScore){
+predictIncomingPatient <- function(mutGenes,clinical,ClinRefit,time.type,MD,LassoFits,RiskScore,means.train){
   
   #if(length(mutGenes) == 0){stop("INPUT ERROR : Enter at least one gene name")}
   #library(plotly)
@@ -59,10 +67,24 @@ predictIncomingPatient <- function(mutGenes,clinical,ClinRefit,time.type,MD,Lass
   ### Part 2 : Get the predicted risk score
   LassoFits <- as.matrix(LassoFits)
   mut <- as.vector(mut)
-  RiskScore.new <- mean(LassoFits%*%t(mut)) 
-  RiskScoreRange <- range(RiskScore)
-  RiskScore <- rescale(RiskScore.new, to = c(0, 10), from = RiskScoreRange)
-  RiskScore <- RiskScore[length(RiskScore)]
+  
+  all.pred <- lapply(1:nrow(LassoFits),function(x){
+    
+    ### Subset to the coefs of that cv ###
+    coefs <- LassoFits[x,LassoFits[x,] != 0]
+    new.temp <- select(mut,names(coefs))
+    ## substract mean mutation rate of TRAINING SET !!!###
+    new.x <- new.temp - rep(means.train[[x]][match(names(coefs),names(means.train[[x]]))], each = nrow(new.temp))
+    cal.risk.test <- drop(as.matrix(new.x) %*% coefs)
+  })
+  all.pred <- unlist(all.pred) #do.call("cbind",all.pred)
+  Risk <- mean(all.pred) #apply(all.pred,1,mean)
+  ori.risk.range <- range(RiskScore)
+  RiskScore <- rescale(Risk, to = c(0, 10), from = ori.risk.range)
+  # RiskScore.new <- mean(LassoFits%*%t(mut)) 
+  # RiskScoreRange <- range(RiskScore)
+  # RiskScore <- rescale(RiskScore.new, to = c(0, 10), from = RiskScoreRange)
+  # RiskScore <- RiskScore[length(RiskScore)]
   ### part 3 : Refit with the given refitted clinical variable
   clin <- as.data.frame(cbind(clin,RiskScore))
   
